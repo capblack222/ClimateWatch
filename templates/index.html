@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weather & Climate Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🌍</span>
+        <div>
+          <div class="logo-title">ClimateWatch</div>
+          <div class="logo-sub">Weather & Climate Planner</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="search-block">
+      <div class="search-wrap">
+        <input type="text" id="citySearch" placeholder="Search a city…" autocomplete="off"/>
+        <span class="search-icon">🔍</span>
+      </div>
+      <ul id="searchResults" class="search-results hidden"></ul>
+    </div>
+
+    <!-- Saved Locations -->
+    <div class="saved-section">
+      <div class="section-label">Saved Locations</div>
+      <ul id="savedList" class="saved-list">
+        {% for loc in saved_locations %}
+        <li class="saved-item" data-id="{{ loc.id }}"
+            data-lat="{{ loc.latitude }}" data-lon="{{ loc.longitude }}"
+            data-city="{{ loc.city_name }}" data-country="{{ loc.country_name }}"
+            data-cc="{{ loc.country_code }}">
+          <span class="saved-city">{{ loc.city_name }}</span>
+          <span class="saved-country">{{ loc.country_name }}</span>
+          <button class="remove-btn" title="Remove">✕</button>
+        </li>
+        {% else %}
+        <li class="empty-saved" id="emptySaved">No saved locations yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Hero / Landing State -->
+    <div id="landingState" class="landing-state">
+      <div class="landing-inner">
+        <div class="landing-emoji">🌤️</div>
+        <h1 class="landing-title">Your Weather & Climate Dashboard</h1>
+        <p class="landing-desc">Search for any city to see live weather, a 7-day forecast, activity suggestions, and country-level climate indicators.</p>
+        {% if last_city %}
+        <button class="resume-btn" id="resumeBtn"
+          data-lat="{{ last_city.lat }}" data-lon="{{ last_city.lon }}"
+          data-city="{{ last_city.city }}" data-country="{{ last_city.country }}"
+          data-cc="{{ last_city.country_code }}">
+          Resume: {{ last_city.city }}, {{ last_city.country }} →
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Dashboard (hidden until city selected) -->
+    <div id="dashboard" class="dashboard hidden">
+
+      <!-- City Header -->
+      <div class="city-header">
+        <div class="city-title-group">
+          <h2 id="cityTitle" class="city-name"></h2>
+          <span id="countryLabel" class="country-label"></span>
+        </div>
+        <button id="saveBtn" class="save-btn">☆ Save Location</button>
+      </div>
+
+      <!-- Current Conditions -->
+      <div class="cards-row">
+        <div class="card card-current">
+          <div class="card-label">Current Conditions</div>
+          <div class="current-main">
+            <span id="currentEmoji" class="weather-emoji">—</span>
+            <div>
+              <div id="currentTemp" class="current-temp">—</div>
+              <div id="currentDesc" class="current-desc">—</div>
+            </div>
+          </div>
+          <div class="current-details">
+            <div class="detail-item"><span class="detail-icon">💧</span><span id="humidity">—</span>% humidity</div>
+            <div class="detail-item"><span class="detail-icon">🌧️</span><span id="precipitation">—</span> mm precip</div>
+            <div class="detail-item"><span class="detail-icon">💨</span><span id="windSpeed">—</span> km/h wind</div>
+            <div class="detail-item"><span class="detail-icon">🌡️</span>Feels <span id="feelsLike">—</span>°C</div>
+          </div>
+        </div>
+
+        <!-- Activity Suggestion -->
+        <div class="card card-suggestion">
+          <div class="card-label">Activity Suggestion</div>
+          <div class="suggestion-content">
+            <div id="suggestionIcon" class="suggestion-big-icon">—</div>
+            <div id="suggestionText" class="suggestion-text">—</div>
+            <div id="suggestionNote" class="suggestion-note">—</div>
+          </div>
+        </div>
+
+        <!-- Climate Indicators -->
+        <div class="card card-climate">
+          <div class="card-label">Country Climate Indicators</div>
+          <div id="climateContent" class="climate-content">
+            <div class="climate-placeholder">Select a city to see indicators</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-Day Forecast -->
+      <div class="forecast-section">
+        <div class="section-label">7-Day Forecast</div>
+        <div id="forecastRow" class="forecast-row"></div>
+      </div>
+
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingState" class="loading-state hidden">
+      <div class="spinner"></div>
+      <p>Fetching weather data…</p>
+    </div>
+
+  </main>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

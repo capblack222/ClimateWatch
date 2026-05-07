@@ -1,0 +1,61 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables
+.env
+.env.*
+
+# Flask instance folder
+instance/
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS files
+Thumbs.db
+
+# Local database files
+*.sqlite3
+*.db
+
+# Temporary files
+tmp/
+temp/
+
+# Data files
+data/
+
+# Ignore compiled Python files
+*.pyc
+
+# Mac system files
+.AppleDouble
+.LSOverride
