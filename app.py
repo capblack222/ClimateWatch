@@ -9,8 +9,8 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = "weather_planner_secret_key_2024"
 
-DB_PATH = "weather_planner.db"
-DATA_DIR = "data"
+DATA_DIR = "data/"
+DB_PATH = DATA_DIR + "weather_planner.db"
 
 # ─── Database Setup ───────────────────────────────────────────────────────────
 
