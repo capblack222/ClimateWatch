@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 import requests
-import json
-import os
-import csv
 from datetime import datetime
+import pandas as pd
+import ssl
+import certifi
 
 app = Flask(__name__)
 app.secret_key = "weather_planner_secret_key_2024"
@@ -55,72 +55,66 @@ def init_db():
 # ─── OWID CSV Loader ──────────────────────────────────────────────────────────
 
 def load_owid_csv():
-    """Load sample OWID data into SQLite. In production, drop in real OWID CSVs."""
     conn = get_db()
     existing = conn.execute("SELECT COUNT(*) FROM climate_indicators").fetchone()[0]
     if existing > 0:
         conn.close()
         return
 
-    # Sample data representing what OWID CSVs contain
-    # In production, parse actual OWID CSV files placed in /data/
-    sample_data = [
-        ("USA", "United States", "co2_per_capita", 2022, 14.9, "tonnes"),
-        ("USA", "United States", "obesity_prevalence", 2022, 36.2, "%"),
-        ("GBR", "United Kingdom", "co2_per_capita", 2022, 5.3, "tonnes"),
-        ("GBR", "United Kingdom", "obesity_prevalence", 2022, 27.8, "%"),
-        ("DEU", "Germany", "co2_per_capita", 2022, 8.1, "tonnes"),
-        ("DEU", "Germany", "obesity_prevalence", 2022, 22.3, "%"),
-        ("FRA", "France", "co2_per_capita", 2022, 4.7, "tonnes"),
-        ("FRA", "France", "obesity_prevalence", 2022, 21.6, "%"),
-        ("IND", "India", "co2_per_capita", 2022, 1.9, "tonnes"),
-        ("IND", "India", "obesity_prevalence", 2022, 3.9, "%"),
-        ("CHN", "China", "co2_per_capita", 2022, 8.0, "tonnes"),
-        ("CHN", "China", "obesity_prevalence", 2022, 6.2, "%"),
-        ("JPN", "Japan", "co2_per_capita", 2022, 8.5, "tonnes"),
-        ("JPN", "Japan", "obesity_prevalence", 2022, 4.3, "%"),
-        ("BRA", "Brazil", "co2_per_capita", 2022, 2.3, "tonnes"),
-        ("BRA", "Brazil", "obesity_prevalence", 2022, 22.1, "%"),
-        ("CAN", "Canada", "co2_per_capita", 2022, 14.2, "tonnes"),
-        ("CAN", "Canada", "obesity_prevalence", 2022, 29.4, "%"),
-        ("AUS", "Australia", "co2_per_capita", 2022, 14.8, "tonnes"),
-        ("AUS", "Australia", "obesity_prevalence", 2022, 29.0, "%"),
-    ]
+    try:
 
+        ssl._create_default_https_context = ssl.create_default_context(
+            cafile=certifi.where()
+        )
+
+        df = pd.read_csv(
+            "https://ourworldindata.org/grapher/co-emissions-per-capita.csv?v=1&csvType=filtered&useColumnShortNames=true",
+            storage_options={"User-Agent": "Our World In Data data fetch/1.0"}
+        )
+
+        # OWID short-name CSV columns: entity, code, year, co2_per_capita
+        # Keep only the most recent year per country to avoid bloat
+        df = df.dropna(subset=["code", "co2_per_capita"])
+        df = df.sort_values("year").groupby("code").last().reset_index()
+
+        rows = [
+            (row["code"], row["entity"], "co2_per_capita", int(row["year"]), float(row["co2_per_capita"]), "tonnes")
+            for _, row in df.iterrows()
+        ]
+        conn.executemany(
+            "INSERT INTO climate_indicators (country_code, country_name, indicator_name, year, value, unit) VALUES (?,?,?,?,?,?)",
+            rows
+        )
+        conn.commit()
+        print(f"Loaded {len(rows)} CO₂ rows from OWID.")
+
+    except Exception as e:
+        print(f"OWID fetch failed: {e}. Falling back to sample data.")
+        _load_sample_data(conn)
+        conn.commit()
+
+    conn.close()
+
+
+def _load_sample_data(conn):
+    """Fallback if OWID is unreachable (offline dev, rate limit, etc.)."""
+    sample_data = [
+        ("USA", "United States",  "co2_per_capita", 2025, 14.9, "tonnes"),
+        ("GBR", "United Kingdom", "co2_per_capita", 2025, 5.3, "tonnes"),
+        ("DEU", "Germany",        "co2_per_capita", 2025, 8.1, "tonnes"),
+        ("FRA", "France",         "co2_per_capita", 2025, 4.7, "tonnes"),
+        ("IND", "India",          "co2_per_capita", 2025, 1.9, "tonnes"),
+        ("CHN", "China",          "co2_per_capita", 2025, 8.0, "tonnes"),
+        ("JPN", "Japan",          "co2_per_capita", 2025, 8.5, "tonnes"),
+        ("BRA", "Brazil",         "co2_per_capita", 2025, 2.3, "tonnes"),
+        ("CAN", "Canada",         "co2_per_capita", 2025, 14.2, "tonnes"),
+        ("AUS", "Australia",      "co2_per_capita", 2025, 14.8, "tonnes"),
+    ]
     conn.executemany(
         "INSERT INTO climate_indicators (country_code, country_name, indicator_name, year, value, unit) VALUES (?,?,?,?,?,?)",
         sample_data
     )
 
-    # Also try to load any real OWID CSVs dropped in /data/
-    for fname in os.listdir(DATA_DIR):
-        if fname.endswith(".csv"):
-            try:
-                _parse_owid_csv(conn, os.path.join(DATA_DIR, fname))
-            except Exception as e:
-                print(f"Could not parse {fname}: {e}")
-
-    conn.commit()
-    conn.close()
-
-def _parse_owid_csv(conn, filepath):
-    """Generic OWID CSV parser (Entity, Code, Year, Value columns)."""
-    with open(filepath, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-        if not rows:
-            return
-        indicator_col = [c for c in rows[0].keys() if c not in ("Entity", "Code", "Year")][0]
-        indicator_name = indicator_col.lower().replace(" ", "_")
-        for row in rows[-500:]:  # last 500 rows (recent years)
-            try:
-                val = float(row.get(indicator_col, "") or 0)
-                conn.execute(
-                    "INSERT OR IGNORE INTO climate_indicators (country_name, country_code, indicator_name, year, value) VALUES (?,?,?,?,?)",
-                    (row["Entity"], row.get("Code", ""), indicator_name, int(row.get("Year", 0)), val)
-                )
-            except (ValueError, KeyError):
-                continue
 
 # ─── Geocoding ────────────────────────────────────────────────────────────────
 
