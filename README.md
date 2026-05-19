@@ -1,7 +1,81 @@
 # 🌍 Weather & Climate Planner
 
-A Flask dashboard combining live weather data from Open-Meteo with
-country-level climate/health indicators (CO₂, obesity) from Our World in Data.
+A modular Flask-based weather and climate dashboard that combines real-time weather forecasting from Open-Meteo with country-level climate indicators from Our World in Data.
+
+The application supports city search, persistent saved locations, 7-day forecasts, climate analytics, and personalized activity recommendations.
+
+---
+
+## Architecture
+
+The project follows a modular Flask application structure using:
+
+- Blueprint-based route separation
+- Service layer abstraction
+- Utility/helper modules
+- SQLite persistence layer
+- Application factory pattern
+
+---
+
+## Project Structure
+
+```
+weather_planner/
+├── run.py                      # App starting point
+├── requirements.txt
+├── data/
+│    └── weather_planner.db      # Auto-created SQLite database
+├── app/
+│    ├── __init__.py
+│    │
+│    ├── routes/
+│    │   ├── __init__.py
+│    │   ├── weather_routes.py
+│    │   └── location_routes.py
+│    │
+│    ├── services/
+│    │   ├── __init__.py
+│    │   ├── weather_service.py
+│    │   ├── geocoding_service.py
+│    │   └── suggestion_service.py
+│    │
+│    ├── utils/
+│    │   ├── __init__.py
+│    │   └── weather_codes.py
+│    │
+│    ├── database/
+│    │   ├── __init__.py
+│    │   ├── db.py
+│    │   └── seed.py
+├── .gitignore
+├── .env
+└── Readme.md
+```
+
+---
+
+## Tech Stack
+
+- Backend: Flask
+- Database: SQLite
+- External APIs:
+  - Open-Meteo API
+  - Open-Meteo Geocoding API
+  - Our World in Data CSV datasets
+- Data Processing: Pandas
+- Frontend: HTML, CSS, JavaScript
+
+---
+
+## Environment Variables
+
+Optional `.env` variables:
+
+```env
+SECRET_KEY=your_secret_key
+DB_PATH=data/weather_planner.db
+```
 
 ---
 
@@ -12,7 +86,7 @@ country-level climate/health indicators (CO₂, obesity) from Our World in Data.
 | Python | 3.9+ | https://python.org |
 | pip | bundled | — |
 
-No API keys required — Open-Meteo is fully free and key-free.
+No API keys required - Open-Meteo is fully free and key-free.
 
 ---
 
@@ -31,7 +105,7 @@ venv\Scripts\activate           # Windows
 pip install -r requirements.txt
 
 # 4. Run the app
-python app.py
+python run.py
 ```
 
 Open your browser at **http://127.0.0.1:5000**
@@ -40,12 +114,10 @@ The SQLite database (`weather_planner.db`) is created automatically on first run
 
 ---
 
-## Loading Real OWID Data (Optional)
+## Loading Real OWID Data 
 
-1. Download any CSV from https://ourworldindata.org  
-   (e.g., "CO₂ per capita" or "Share of adults who are obese")
-2. Drop the `.csv` file into the `/data/` folder.
-3. Restart the app — it parses columns named `Entity`, `Code`, `Year`, and the metric column automatically.
+Climate indicator data is fetched automatically from Our World in Data's public CSV endpoint during first launch.
+No manual dataset download is required.
 
 ---
 
@@ -60,25 +132,15 @@ The SQLite database (`weather_planner.db`) is created automatically on first run
 
 ---
 
-## Project Structure
+## Reliability Features
 
-```
-weather_planner/
-├── app.py                  # Flask routes, DB logic, weather/geocoding calls
-├── requirements.txt
-├── weather_planner.db      # Auto-created SQLite database
-├── data/                   # Drop OWID CSVs here
-├── templates/
-│   └── index.html          # Jinja2 template
-└── static/
-    ├── css/style.css
-    └── js/app.js
-```
+- Automatic fallback sample climate data if OWID fetch fails
+- Timeout protection for external API calls
+- SQLite auto-initialization on first launch
 
 ---
 
-## Extension Ideas (from project spec)
+## Future Enhancements
 
 - **Compare two cities**: add a `/compare` route returning JSON for both cities, render side-by-side cards.
 - **MongoDB caching**: replace the `weather_cache` SQLite table with PyMongo writes to Atlas.
-- **Per-user preferences**: extend Flask sessions to store preferred metric (CO₂ vs. obesity).
