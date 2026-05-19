@@ -261,9 +261,9 @@ body {
 .climate-content { display: flex; flex-direction: column; gap: 10px; }
 .climate-placeholder { color: var(--muted); font-size: 0.85rem; }
 .climate-item { display: flex; flex-direction: column; gap: 2px; }
-.climate-name { font-size: 0.78rem; color: var(--muted); text-transform: capitalize; }
-.climate-val { font-size: 1.3rem; font-family: 'DM Serif Display', serif; color: var(--accent); }
-.climate-meta { font-size: 0.72rem; color: var(--muted); }
+.climate-name { color: var(--muted); text-transform: capitalize; }
+.climate-val { font-size: 1.8rem; font-family: 'DM Serif Display', serif; color: var(--accent); }
+.climate-meta { padding-top: 2mm; padding-bottom: 1mm;font-size: 0.72rem; color: var(--muted); }
 .climate-bar-wrap { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 2px; }
 .climate-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.8s ease; }
 
