@@ -9,6 +9,9 @@ def get_db():
     return conn
 
 def init_db():
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS saved_locations (
@@ -29,13 +32,6 @@ def init_db():
             year INTEGER,
             value REAL,
             unit TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS weather_cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cache_key TEXT UNIQUE NOT NULL,
-            data TEXT NOT NULL,
-            cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
     conn.commit()

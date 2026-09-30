@@ -1,13 +1,12 @@
-from flask import Blueprint, Flask, request, jsonify, session, render_template
-from app.services.geocoding_service import geocode_city
-from app.services.weather_service import fetch_weather
-from app.services.suggestion_service import activity_suggestion
-from app.utils.weather_codes import wmo_description
+from flask import Blueprint, jsonify, render_template, request, session
+
 from app.database.db import get_db
-import os
+from app.services.geocoding_service import geocode_city
+from app.services.suggestion_service import activity_suggestion
+from app.services.weather_service import fetch_weather
+from app.utils.weather_codes import wmo_description
 
 weather_bp = Blueprint("weather", __name__)
-# weather_bp.secret_key = os.getenv("FLASK_SECRET_KEY", "weather_planner_secret_key_2026")
 
 @weather_bp.route("/")
 def index():

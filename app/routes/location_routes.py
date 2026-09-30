@@ -1,6 +1,6 @@
-from flask import Blueprint, request, jsonify
-from app.database.db import get_db, init_db
-from app.database.seed import load_owid_csv
+from flask import Blueprint, jsonify, request
+
+from app.database.db import get_db
 
 location_bp = Blueprint("location", __name__)
 
@@ -38,8 +38,3 @@ def get_saved():
     rows = conn.execute("SELECT * FROM saved_locations ORDER BY added_at DESC").fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
-
-if __name__ == "__main__":
-    init_db()
-    load_owid_csv()
-    location_bp.run(debug=True)
