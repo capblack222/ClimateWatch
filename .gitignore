@@ -59,3 +59,7 @@ data/
 # Mac system files
 .AppleDouble
 .LSOverride
+
+# Ignore Architecture discussion files
+_notes/
+Claude/
