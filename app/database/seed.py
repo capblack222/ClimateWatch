@@ -1,7 +1,14 @@
+import io
+
 import pandas as pd
-import ssl
-import certifi
+import requests
+
 from app.database.db import get_db
+
+OWID_CO2_URL = (
+    "https://ourworldindata.org/grapher/co-emissions-per-capita.csv"
+    "?v=1&csvType=filtered&useColumnShortNames=true"
+)
 
 def load_owid_csv():
     conn = get_db()
@@ -11,15 +18,14 @@ def load_owid_csv():
         return
 
     try:
-
-        ssl._create_default_https_context = ssl.create_default_context(
-            cafile=certifi.where()
+        # requests verifies TLS with certifi's CA bundle, so no global SSL patching is needed.
+        resp = requests.get(
+            OWID_CO2_URL,
+            headers={"User-Agent": "Our World In Data data fetch/1.0"},
+            timeout=30,
         )
-
-        df = pd.read_csv(
-            "https://ourworldindata.org/grapher/co-emissions-per-capita.csv?v=1&csvType=filtered&useColumnShortNames=true",
-            storage_options={"User-Agent": "Our World In Data data fetch/1.0"}
-        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
 
         # OWID short-name CSV columns: entity, code, year, co2_per_capita
         # Keep only the most recent year per country to avoid bloat

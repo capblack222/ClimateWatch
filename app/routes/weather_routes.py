@@ -7,6 +7,7 @@ from app.services.geocoding_service import geocode_city
 from app.services.suggestion_service import activity_suggestion
 from app.services.weather_service import fetch_weather
 from app.utils.weather_codes import wmo_description
+from app.utils.country_codes import to_alpha3
 
 weather_bp = Blueprint("weather", __name__)
 
@@ -82,13 +83,23 @@ def weather():
         })
 
     # Climate indicators for this country
+    # Open-Meteo returns alpha-2 codes ("NE"); OWID stores alpha-3 ("NER"). Match the exact code,
+    # falling back to an exact (case-insensitive) country name, never a partial LIKE match.
     conn = get_db()
-    indicators = conn.execute(
-        """SELECT indicator_name, value, unit, year FROM climate_indicators
-           WHERE country_code = ? OR country_name LIKE ?
-           ORDER BY year DESC""",
-        (country_code.upper(), f"%{country}%")
-    ).fetchall()
+    indicators = []
+    alpha3 = to_alpha3(country_code)
+    if alpha3:
+        indicators = conn.execute(
+            """SELECT indicator_name, value, unit, year FROM climate_indicators
+               WHERE country_code = ? ORDER BY year DESC""",
+            (alpha3,)
+        ).fetchall()
+    if not indicators and country:
+        indicators = conn.execute(
+            """SELECT indicator_name, value, unit, year FROM climate_indicators
+               WHERE LOWER(country_name) = LOWER(?) ORDER BY year DESC""",
+            (country,)
+        ).fetchall()
     conn.close()
 
     climate = {}
