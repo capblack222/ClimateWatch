@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, render_template, request, session
 
 from app.database.db import get_db
+from app.schemas import SearchQuery, WeatherQuery, validation_error_response
+from pydantic import ValidationError
 from app.services.geocoding_service import geocode_city
 from app.services.suggestion_service import activity_suggestion
 from app.services.weather_service import fetch_weather
@@ -18,10 +20,13 @@ def index():
 
 @weather_bp.route("/search")
 def search():
-    query = request.args.get("q", "").strip()
-    if not query:
+    try:
+        params = SearchQuery.model_validate(request.args.to_dict())
+    except ValidationError as err:
+        return validation_error_response(err)
+    if not params.q:
         return jsonify([])
-    results = geocode_city(query)
+    results = geocode_city(params.q)
     out = []
     for r in results:
         out.append({
@@ -36,14 +41,12 @@ def search():
 
 @weather_bp.route("/weather")
 def weather():
-    lat = request.args.get("lat", type=float)
-    lon = request.args.get("lon", type=float)
-    city = request.args.get("city", "")
-    country = request.args.get("country", "")
-    country_code = request.args.get("country_code", "")
-
-    if lat is None or lon is None:
-        return jsonify({"error": "lat/lon required"}), 400
+    try:
+        params = WeatherQuery.model_validate(request.args.to_dict())
+    except ValidationError as err:
+        return validation_error_response(err)
+    lat, lon = params.lat, params.lon
+    city, country, country_code = params.city, params.country, params.country_code
 
     # Save last selected city in session
     session["last_city"] = {"city": city, "country": country, "lat": lat, "lon": lon, "country_code": country_code}
