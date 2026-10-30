@@ -39,10 +39,16 @@ The project follows a modular Flask application structure using:
 ClimateWatch/
 ├── run.py                      # App starting point
 ├── requirements.txt
+├── requirements-dev.txt        # Test and lint tools
+├── pyproject.toml              # Ruff, pytest and coverage settings
 ├── data/
 │    └── weather_planner.db      # Auto-created SQLite database
 ├── app/
-│    ├── __init__.py
+│    ├── __init__.py             # App factory, request logging
+│    ├── config.py
+│    ├── errors.py               # Error types and JSON error responses
+│    ├── logging_config.py       # Structured JSON logs
+│    ├── schemas.py              # Pydantic request validation
 │    │
 │    ├── routes/
 │    │   ├── __init__.py
@@ -53,16 +59,27 @@ ClimateWatch/
 │    │   ├── __init__.py
 │    │   ├── weather_service.py
 │    │   ├── geocoding_service.py
+│    │   ├── climate_service.py
 │    │   └── suggestion_service.py
+│    │
+│    ├── repositories/           # All SQL lives here
+│    │   ├── locations_repo.py
+│    │   └── climate_repo.py
 │    │
 │    ├── utils/
 │    │   ├── __init__.py
-│    │   └── weather_codes.py
+│    │   ├── weather_codes.py
+│    │   └── country_codes.py
 │    │
 │    ├── database/
 │    │   ├── __init__.py
 │    │   ├── db.py
+│    │   ├── sample_data.py
 │    │   └── seed.py
+├── tests/                      # pytest suite
+├── perf/
+│    └── locustfile.py           # Local latency baseline
+├── .github/workflows/ci.yml    # Lint + tests on every push
 ├── .gitignore
 ├── .env
 ├── LICENSE
@@ -102,7 +119,7 @@ FLASK_DEBUG=1                   # local development only
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Python | 3.9+ | https://python.org |
+| Python | 3.10+ | https://python.org |
 | pip | bundled | — |
 
 No API keys required - Open-Meteo is fully free and key-free.
@@ -124,16 +141,25 @@ venv\Scripts\activate           # Windows
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Create the data folder for the SQLite database
-mkdir data
-
-# 5. Run the app
+# 4. Run the app
 python run.py
 ```
 
 Open your browser at **http://127.0.0.1:5000**
 
 The SQLite database (`weather_planner.db`) is created automatically inside `data/` on first run.
+
+---
+
+## Running Tests
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+pytest --cov
+```
+
+Tests use a temporary database and mock every external API call, so they run offline.
 
 ---
 
@@ -157,9 +183,12 @@ No manual dataset download is required.
 
 ## Reliability Features
 
-- Automatic fallback sample climate data if OWID fetch fails
-- Timeout protection for external API calls
-- SQLite auto-initialization on first launch
+- Automatic fallback sample climate data if OWID fetch fails, labelled as sample data and replaced on the next successful download
+- Timeout protection for external API calls, with failures returned as structured `502` errors
+- Request validation with Pydantic and consistent JSON error responses
+- Structured JSON logs with per-request duration
+- SQLite auto-initialization and in-place schema migrations on launch
+- Unit and route tests with pytest, run in GitHub Actions on every push
 
 ---
 
@@ -170,7 +199,6 @@ No manual dataset download is required.
 - **Weather alerts**: email notifications when a city crosses heat, rain or wind thresholds.
 - **Full OWID time series**: store every year of climate indicators instead of only the latest.
 - **Compare two cities**: add a `/compare` route returning JSON for both cities, render side-by-side cards.
-- **Testing and CI**: unit and route tests with pytest, run automatically on every push.
 
 ---
 
