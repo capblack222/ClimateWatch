@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/repositories/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
