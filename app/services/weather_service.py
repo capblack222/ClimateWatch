@@ -1,5 +1,6 @@
 import requests
 
+from app import http_client
 from app.errors import UpstreamServiceError
 from app.utils.weather_codes import wmo_description
 
@@ -22,7 +23,7 @@ def fetch_weather(lat, lon):
         "forecast_days": 7,
     }
     try:
-        resp = requests.get(FORECAST_URL, params=params, timeout=10)
+        resp = http_client.get(FORECAST_URL, params=params, timeout=10)
         resp.raise_for_status()
     except requests.RequestException as err:
         raise UpstreamServiceError(SERVICE, str(err)) from err

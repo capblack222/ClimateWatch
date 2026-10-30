@@ -42,10 +42,19 @@ def create_app(config_class=Config):
         start = g.get("request_start")
         duration_ms = round((time.perf_counter() - start) * 1000, 1) if start else None
         # Path only, no query string, so search terms and coordinates stay out of the logs.
+        upstream_ms = g.get("upstream_ms")
         request_logger.info(
             "request",
-            extra={"method": request.method, "path": request.path, "status": response.status_code,
-                   "duration_ms": duration_ms},
+            extra={
+                "method": request.method,
+                "path": request.path,
+                "status": response.status_code,
+                "duration_ms": duration_ms,
+                # Time spent waiting on Open-Meteo, so app time = duration_ms - upstream_ms.
+                "upstream_ms": round(upstream_ms, 1) if upstream_ms is not None else 0.0,
+                "upstream_calls": g.get("upstream_calls", 0),
+                "http_reuse": app.config["HTTP_REUSE_CONNECTIONS"],
+            },
         )
         return response
 

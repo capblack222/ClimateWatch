@@ -1,5 +1,6 @@
 import requests
 
+from app import http_client
 from app.errors import UpstreamServiceError
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -10,7 +11,7 @@ def search_cities(name):
     """Up to 5 matching cities, shaped for the frontend. [] if none match; UpstreamServiceError on failure."""
     params = {"name": name, "count": 5, "language": "en", "format": "json"}
     try:
-        resp = requests.get(GEOCODING_URL, params=params, timeout=8)
+        resp = http_client.get(GEOCODING_URL, params=params, timeout=8)
         resp.raise_for_status()
     except requests.RequestException as err:
         raise UpstreamServiceError(SERVICE, str(err)) from err
