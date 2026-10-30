@@ -31,17 +31,26 @@ document.addEventListener("click", e => {
   if (!e.target.closest(".search-block")) searchResults.classList.add("hidden");
 });
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 async function doSearch(q) {
   const resp = await fetch(`/search?q=${encodeURIComponent(q)}`);
-  const results = await resp.json();
   searchResults.innerHTML = "";
+  if (!resp.ok) {
+    searchResults.innerHTML = `<li style="color:var(--muted);cursor:default">Search is unavailable right now</li>`;
+    searchResults.classList.remove("hidden");
+    return;
+  }
+  const results = await resp.json();
   if (!results.length) {
     searchResults.innerHTML = `<li style="color:var(--muted);cursor:default">No results found</li>`;
   } else {
     results.forEach(r => {
       const li = document.createElement("li");
       const sub = [r.admin1, r.country].filter(Boolean).join(", ");
-      li.innerHTML = `<div class="result-city">${r.name}</div><div class="result-sub">${sub}</div>`;
+      li.innerHTML = `<div class="result-city">${escapeHtml(r.name)}</div><div class="result-sub">${escapeHtml(sub)}</div>`;
       li.addEventListener("click", () => {
         searchResults.classList.add("hidden");
         citySearch.value = "";
@@ -131,7 +140,7 @@ function renderClimate(climate) {
       <div class="climate-item">
         <div class="climate-name">${label}</div>
         <div class="climate-val">${item.value} <span style="font-size:0.8rem;font-family:'DM Sans'">${item.unit}</span></div>
-        <div class="climate-meta">Data year: ${item.year}</div>
+        <div class="climate-meta">Data year: ${item.year}${item.source === "sample" ? " · sample data" : ""}</div>
         <div class="climate-bar-wrap"><div class="climate-bar" style="width:${pct}%"></div></div>
       </div>
     `;

@@ -1,13 +1,9 @@
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
-from app.database.db import get_db
-from app.schemas import (
-    SaveLocationRequest,
-    UnsaveLocationRequest,
-    error_response,
-    validation_error_response,
-)
+from app.errors import error_response
+from app.repositories import locations_repo
+from app.schemas import SaveLocationRequest, UnsaveLocationRequest, validation_error_response
 
 location_bp = Blueprint("location", __name__)
 
@@ -28,21 +24,8 @@ def save_location():
     except ValidationError as err:
         return validation_error_response(err)
 
-    conn = get_db()
-    existing = conn.execute(
-        "SELECT id FROM saved_locations WHERE city_name=? AND ABS(latitude-?)< 0.01",
-        (loc.city, loc.lat)
-    ).fetchone()
-    if existing:
-        conn.close()
-        return jsonify({"status": "already_saved"})
-    conn.execute(
-        "INSERT INTO saved_locations (city_name, country_code, country_name, latitude, longitude) VALUES (?,?,?,?,?)",
-        (loc.city, loc.country_code, loc.country, loc.lat, loc.lon)
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "saved"})
+    saved = locations_repo.add_location(loc.city, loc.country_code, loc.country, loc.lat, loc.lon)
+    return jsonify({"status": "saved" if saved else "already_saved"})
 
 
 @location_bp.route("/unsave", methods=["POST"])
@@ -55,18 +38,11 @@ def unsave_location():
     except ValidationError as err:
         return validation_error_response(err)
 
-    conn = get_db()
-    cur = conn.execute("DELETE FROM saved_locations WHERE id=?", (req.id,))
-    conn.commit()
-    conn.close()
-    if cur.rowcount == 0:
+    if not locations_repo.delete_location(req.id):
         return error_response("not_found", "Saved location not found", 404)
     return jsonify({"status": "removed"})
 
 
 @location_bp.route("/saved")
 def get_saved():
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM saved_locations ORDER BY added_at DESC").fetchall()
-    conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(locations_repo.list_locations())

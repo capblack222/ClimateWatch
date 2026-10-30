@@ -1,23 +1,22 @@
 from flask import Blueprint, jsonify, render_template, request, session
-
-from app.database.db import get_db
-from app.schemas import SearchQuery, WeatherQuery, validation_error_response
 from pydantic import ValidationError
-from app.services.geocoding_service import geocode_city
+
+from app.repositories import locations_repo
+from app.schemas import SearchQuery, WeatherQuery, validation_error_response
+from app.services.climate_service import get_country_indicators
+from app.services.geocoding_service import search_cities
 from app.services.suggestion_service import activity_suggestion
-from app.services.weather_service import fetch_weather
-from app.utils.weather_codes import wmo_description
-from app.utils.country_codes import to_alpha3
+from app.services.weather_service import fetch_weather, summarize_current, summarize_forecast
 
 weather_bp = Blueprint("weather", __name__)
 
+
 @weather_bp.route("/")
 def index():
-    conn = get_db()
-    saved = conn.execute("SELECT * FROM saved_locations ORDER BY added_at DESC").fetchall()
-    conn.close()
-    last_city = session.get("last_city")
-    return render_template("index.html", saved_locations=saved, last_city=last_city)
+    return render_template(
+        "index.html", saved_locations=locations_repo.list_locations(), last_city=session.get("last_city")
+    )
+
 
 @weather_bp.route("/search")
 def search():
@@ -25,103 +24,28 @@ def search():
         params = SearchQuery.model_validate(request.args.to_dict())
     except ValidationError as err:
         return validation_error_response(err)
-    if not params.q:
-        return jsonify([])
-    results = geocode_city(params.q)
-    out = []
-    for r in results:
-        out.append({
-            "name": r.get("name"),
-            "country": r.get("country"),
-            "country_code": r.get("country_code", ""),
-            "admin1": r.get("admin1", ""),
-            "latitude": r.get("latitude"),
-            "longitude": r.get("longitude"),
-        })
-    return jsonify(out)
+    return jsonify(search_cities(params.q) if params.q else [])
+
 
 @weather_bp.route("/weather")
 def weather():
     try:
-        params = WeatherQuery.model_validate(request.args.to_dict())
+        q = WeatherQuery.model_validate(request.args.to_dict())
     except ValidationError as err:
         return validation_error_response(err)
-    lat, lon = params.lat, params.lon
-    city, country, country_code = params.city, params.country, params.country_code
 
-    # Save last selected city in session
-    session["last_city"] = {"city": city, "country": country, "lat": lat, "lon": lon, "country_code": country_code}
+    session["last_city"] = {"city": q.city, "country": q.country, "lat": q.lat, "lon": q.lon,
+                            "country_code": q.country_code}
 
-    # Fetch weather
-    raw = fetch_weather(lat, lon)
-    if not raw:
-        return jsonify({"error": "Could not fetch weather data"}), 500
-
-    current = raw.get("current", {})
-    daily = raw.get("daily", {})
-
-    temp = current.get("temperature_2m")
-    precip = current.get("precipitation")
-    wind = current.get("wind_speed_10m")
-    code = current.get("weather_code", 0)
-    desc, emoji = wmo_description(code)
-    suggestion, sug_icon, sug_note = activity_suggestion(temp, precip, wind)
-
-    # Build forecast list
-    forecast = []
-    for i in range(len(daily.get("time", []))):
-        day_code = daily["weather_code"][i] if i < len(daily.get("weather_code", [])) else 0
-        day_desc, day_emoji = wmo_description(day_code)
-        forecast.append({
-            "date": daily["time"][i],
-            "description": day_desc,
-            "emoji": day_emoji,
-            "temp_max": daily["temperature_2m_max"][i],
-            "temp_min": daily["temperature_2m_min"][i],
-            "precip": daily["precipitation_sum"][i],
-            "wind": daily["wind_speed_10m_max"][i],
-        })
-
-    # Climate indicators for this country
-    # Open-Meteo returns alpha-2 codes ("NE"); OWID stores alpha-3 ("NER"). Match the exact code,
-    # falling back to an exact (case-insensitive) country name, never a partial LIKE match.
-    conn = get_db()
-    indicators = []
-    alpha3 = to_alpha3(country_code)
-    if alpha3:
-        indicators = conn.execute(
-            """SELECT indicator_name, value, unit, year FROM climate_indicators
-               WHERE country_code = ? ORDER BY year DESC""",
-            (alpha3,)
-        ).fetchall()
-    if not indicators and country:
-        indicators = conn.execute(
-            """SELECT indicator_name, value, unit, year FROM climate_indicators
-               WHERE LOWER(country_name) = LOWER(?) ORDER BY year DESC""",
-            (country,)
-        ).fetchall()
-    conn.close()
-
-    climate = {}
-    for row in indicators:
-        name = row["indicator_name"]
-        if name not in climate:
-            climate[name] = {"value": row["value"], "unit": row["unit"] or "", "year": row["year"]}
+    raw = fetch_weather(q.lat, q.lon)  # UpstreamServiceError -> 502 via app.errors
+    current = summarize_current(raw)
+    text, icon, note = activity_suggestion(current["temperature"], current["precipitation"], current["wind_speed"])
 
     return jsonify({
-        "city": city,
-        "country": country,
-        "current": {
-            "temperature": temp,
-            "feels_like": current.get("apparent_temperature"),
-            "humidity": current.get("relative_humidity_2m"),
-            "precipitation": precip,
-            "wind_speed": wind,
-            "description": desc,
-            "emoji": emoji,
-            "is_day": current.get("is_day", 1),
-        },
-        "forecast": forecast,
-        "suggestion": {"text": suggestion, "icon": sug_icon, "note": sug_note},
-        "climate": climate,
+        "city": q.city,
+        "country": q.country,
+        "current": current,
+        "forecast": summarize_forecast(raw),
+        "suggestion": {"text": text, "icon": icon, "note": note},
+        "climate": get_country_indicators(q.country_code, q.country),
     })

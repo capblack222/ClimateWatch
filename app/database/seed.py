@@ -1,71 +1,59 @@
 import io
+import logging
 
 import pandas as pd
 import requests
 
-from app.database.db import get_db
+from app.database.sample_data import SAMPLE_DATA, SAMPLE_YEAR
+from app.repositories import climate_repo
+
+logger = logging.getLogger(__name__)
 
 OWID_CO2_URL = (
     "https://ourworldindata.org/grapher/co-emissions-per-capita.csv"
-    "?v=1&csvType=filtered&useColumnShortNames=true"
+    "?v=1&csvType=full&useColumnShortNames=true"  # "filtered" returns only the chart's preset countries
 )
 
+def _download_owid_rows():
+    """Download OWID CO2 per capita and keep the latest year per country."""
+    # requests verifies TLS with certifi's CA bundle, so no global SSL patching is needed.
+    resp = requests.get(OWID_CO2_URL, headers={"User-Agent": "Our World In Data data fetch/1.0"}, timeout=30)
+    resp.raise_for_status()
+    df = pd.read_csv(io.StringIO(resp.text))
+
+    # Columns are entity, code, year, plus one value column. OWID has renamed that column before
+    # (co2_per_capita -> emissions_total_per_capita), so find it instead of hardcoding the name.
+    value_columns = [c for c in df.columns if c not in ("entity", "code", "year")]
+    if not {"entity", "code", "year"} <= set(df.columns) or len(value_columns) != 1:
+        raise ValueError(f"unexpected OWID CSV columns: {list(df.columns)}")
+    value = value_columns[0]
+
+    df = df.dropna(subset=["code", value])  # rows without a code are regions (Africa, World, ...)
+    df = df.sort_values("year").groupby("code").last().reset_index()
+    return [
+        (row["code"], row["entity"], "co2_per_capita", int(row["year"]), float(row[value]), "tonnes", "owid")
+        for _, row in df.iterrows()
+    ]
+
+
 def load_owid_csv():
-    conn = get_db()
-    existing = conn.execute("SELECT COUNT(*) FROM climate_indicators").fetchone()[0]
-    if existing > 0:
-        conn.close()
+    """Load real OWID data. Retries on every start while only sample data (or nothing) is present.
+
+    Must run inside an app context.
+    """
+    if climate_repo.count(source="owid") > 0:
         return
 
     try:
-        # requests verifies TLS with certifi's CA bundle, so no global SSL patching is needed.
-        resp = requests.get(
-            OWID_CO2_URL,
-            headers={"User-Agent": "Our World In Data data fetch/1.0"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text))
+        rows = _download_owid_rows()
+    except (requests.RequestException, ValueError, KeyError) as err:
+        if climate_repo.count() == 0:
+            climate_repo.insert_rows([
+                (code, name, "co2_per_capita", SAMPLE_YEAR, value, "tonnes", "sample")
+                for code, name, value in SAMPLE_DATA
+            ])
+        logger.warning("OWID download failed; serving sample data", extra={"error": str(err)})
+        return
 
-        # OWID short-name CSV columns: entity, code, year, co2_per_capita
-        # Keep only the most recent year per country to avoid bloat
-        df = df.dropna(subset=["code", "co2_per_capita"])
-        df = df.sort_values("year").groupby("code").last().reset_index()
-
-        rows = [
-            (row["code"], row["entity"], "co2_per_capita", int(row["year"]), float(row["co2_per_capita"]), "tonnes")
-            for _, row in df.iterrows()
-        ]
-        conn.executemany(
-            "INSERT INTO climate_indicators (country_code, country_name, indicator_name, year, value, unit) VALUES (?,?,?,?,?,?)",
-            rows
-        )
-        conn.commit()
-        print(f"Loaded {len(rows)} CO₂ rows from OWID.")
-
-    except Exception as e:
-        print(f"OWID fetch failed: {e}. Falling back to sample data.")
-        _load_sample_data(conn)
-        conn.commit()
-
-    conn.close()
-
-
-def _load_sample_data(conn):
-    """Fallback if OWID is unreachable (offline dev, rate limit, etc.)."""
-    sample_data = [
-        ("USA", "United States",  "co2_per_capita", 2025, 14.9, "tonnes"),
-        ("GBR", "United Kingdom", "co2_per_capita", 2025, 5.3, "tonnes"),
-        ("DEU", "Germany",        "co2_per_capita", 2025, 8.1, "tonnes"),
-        ("FRA", "France",         "co2_per_capita", 2025, 4.7, "tonnes"),
-        ("IND", "India",          "co2_per_capita", 2025, 1.9, "tonnes"),
-        ("CHN", "China",          "co2_per_capita", 2025, 8.0, "tonnes"),
-        ("JPN", "Japan",          "co2_per_capita", 2025, 8.5, "tonnes"),
-        ("BRA", "Brazil",         "co2_per_capita", 2025, 2.3, "tonnes"),
-        ("CAN", "Canada",         "co2_per_capita", 2025, 14.2, "tonnes"),
-        ("AUS", "Australia",      "co2_per_capita", 2025, 14.8, "tonnes"),
-    ]
-    conn.executemany(
-        "INSERT INTO climate_indicators (country_code, country_name, indicator_name, year, value, unit) VALUES (?,?,?,?,?,?)",
-        sample_data
-    )
+    climate_repo.replace_samples_with(rows)
+    logger.info("Loaded OWID CO2 data", extra={"rows": len(rows)})

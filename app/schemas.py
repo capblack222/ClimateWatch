@@ -1,6 +1,7 @@
 """Request schemas: every route validates its input here before touching the database or external APIs."""
-from flask import jsonify
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from app.errors import error_response
 
 
 class _Schema(BaseModel):
@@ -29,14 +30,6 @@ class SaveLocationRequest(_Schema):
 
 class UnsaveLocationRequest(_Schema):
     id: int = Field(gt=0)
-
-
-def error_response(code, message, status, details=None):
-    """Single JSON error shape used by every route."""
-    body = {"error": {"code": code, "message": message}}
-    if details:
-        body["error"]["details"] = details
-    return jsonify(body), status
 
 
 def validation_error_response(err: ValidationError):
