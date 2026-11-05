@@ -1,6 +1,6 @@
 import json
 
-from perf.analyze_logs import load, nearest_rank
+from perf.analyze_logs import load, nearest_rank, new_connection_rate
 
 
 def test_nearest_rank():
@@ -23,3 +23,10 @@ def test_load_groups_successful_requests_by_path_and_mode(tmp_path):
     groups = load([str(log)])
     assert list(groups) == [("/weather", "reuse on")]
     assert len(groups[("/weather", "reuse on")]) == 1
+
+
+def test_new_connection_rate_ignores_logs_from_before_the_counter():
+    old = {"upstream_calls": 1}  # written before upstream_new_connections existed
+    new = {"upstream_calls": 1, "upstream_new_connections": 1}
+    assert new_connection_rate([old, new]) == 1.0
+    assert new_connection_rate([old]) is None

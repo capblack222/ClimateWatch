@@ -145,7 +145,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Open your browser at **http://127.0.0.1:5000**
+Open your browser at **http://127.0.0.1:5050** (set `PORT` to use another port)
 
 The SQLite database (`weather_planner.db`) is created automatically inside `data/` on first run.
 

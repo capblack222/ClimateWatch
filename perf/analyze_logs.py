@@ -18,6 +18,15 @@ def nearest_rank(values, pct):
     return ordered[max(0, math.ceil(pct / 100 * len(ordered)) - 1)]
 
 
+def new_connection_rate(entries):
+    """New connections per upstream call, over entries logged after the counter existed (None if none were)."""
+    tracked = [e for e in entries if "upstream_new_connections" in e]
+    calls = sum(e.get("upstream_calls", 0) for e in tracked)
+    if not calls:
+        return None
+    return sum(e["upstream_new_connections"] for e in tracked) / calls
+
+
 def load(paths):
     groups = defaultdict(list)
     for path in paths:
@@ -43,10 +52,8 @@ def main(paths):
         total = [e["duration_ms"] for e in entries]
         upstream = [e.get("upstream_ms", 0.0) for e in entries]
         in_app = [t - u for t, u in zip(total, upstream, strict=True)]
-        calls = sum(e.get("upstream_calls", 0) for e in entries)
-        new_conns = sum(e.get("upstream_new_connections", 0) for e in entries)
-        tracked = any("upstream_new_connections" in e for e in entries)
-        new_rate = f"{new_conns / calls:.0%}" if calls and tracked else "-"
+        rate = new_connection_rate(entries)
+        new_rate = f"{rate:.0%}" if rate is not None else "-"
         p99 = f"{nearest_rank(total, 99):.0f}" if len(total) >= 100 else "n<100"
         print(
             f"| {path} | {mode} | {len(total)} | {nearest_rank(total, 50):.0f} | {nearest_rank(total, 95):.0f} | "

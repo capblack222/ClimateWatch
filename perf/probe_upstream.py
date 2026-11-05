@@ -6,7 +6,7 @@ alternates every round, so city-specific server time and network drift affect bo
 Output is broken down per city, so per-location differences are visible instead of averaged away.
 
 Usage:
-    python3 perf/probe_upstream.py --rounds 10 --csv _notes/metrics/probe_v2_raw.csv
+    python3 -m perf.probe_upstream --rounds 10 --csv _notes/metrics/probe_v2_raw.csv
 """
 import argparse
 import csv

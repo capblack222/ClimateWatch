@@ -1,46 +1,78 @@
 """Outbound HTTP for Open-Meteo calls: optional connection reuse plus per-request timing.
 
-Every call adds its wall-clock time to `g.upstream_ms`, and every new TCP/TLS connection that urllib3
-opens is counted in `g.upstream_new_connections`, so the request log shows directly whether a request
-reused a pooled connection or paid for a fresh handshake.
+Every call adds its wall-clock time to `g.upstream_ms`, and every TCP/TLS handshake urllib3 performs is
+counted in `g.upstream_new_connections`, so the request log shows directly whether a request reused a
+pooled connection or paid for a fresh handshake. Scripts without a Flask context (perf/idle_probe.py)
+read the process-wide `new_connections_total()` instead.
 """
-import logging
+import threading
 import time
 
 import requests
 from flask import current_app, g, has_app_context
 from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 _session = None
-_URLLIB3_LOGGER = "urllib3.connectionpool"
+_total_connects = 0
+_total_lock = threading.Lock()
 
 
-class _NewConnectionCounter(logging.Handler):
-    """Counts urllib3's 'Starting new HTTPS connection' events against the current request."""
+def new_connections_total():
+    """Handshakes performed by counting sessions in this process, across all threads."""
+    return _total_connects
 
-    def emit(self, record):
-        if record.levelno >= logging.WARNING:
-            logging.getLogger().handle(record)  # keep urllib3 warnings visible in the normal log stream
-            return
-        if record.msg.startswith("Starting new HTTP") and has_app_context():
+
+class _CountsConnects:
+    """Counts at connect(), the one place every handshake passes through. This includes urllib3 reopening a
+    pooled connection the server dropped, which reuses the same object and logs no 'Starting new' line."""
+
+    def connect(self):
+        global _total_connects
+        super().connect()
+        with _total_lock:
+            _total_connects += 1
+        if has_app_context():
             g.upstream_new_connections = g.get("upstream_new_connections", 0) + 1
 
 
-def install_connection_counter():
-    """Idempotent. urllib3 reports new connections only at DEBUG, so capture that logger privately."""
-    logger = logging.getLogger(_URLLIB3_LOGGER)
-    if not any(isinstance(h, _NewConnectionCounter) for h in logger.handlers):
-        logger.addHandler(_NewConnectionCounter())
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False  # don't print urllib3 debug lines; warnings are re-emitted above
+class _CountingHTTPConnection(_CountsConnects, HTTPConnection):
+    pass
+
+
+class _CountingHTTPSConnection(_CountsConnects, HTTPSConnection):
+    pass
+
+
+class _CountingHTTPPool(HTTPConnectionPool):
+    ConnectionCls = _CountingHTTPConnection
+
+
+class _CountingHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = _CountingHTTPSConnection
+
+
+class _CountingAdapter(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {"http": _CountingHTTPPool, "https": _CountingHTTPSPool}
+
+
+def counting_session(**adapter_kwargs):
+    """A requests Session whose handshakes are counted (see module docstring)."""
+    session = requests.Session()
+    adapter = _CountingAdapter(**adapter_kwargs)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
 
 def _shared_session():
     """One pooled Session per process, so TCP and TLS connections are reused across requests."""
     global _session
     if _session is None:
-        _session = requests.Session()
-        _session.mount("https://", HTTPAdapter(pool_connections=4, pool_maxsize=10))
+        _session = counting_session(pool_connections=4, pool_maxsize=10)
     return _session
 
 
@@ -49,10 +81,13 @@ def _reuse_connections():
 
 
 def get(url, **kwargs):
-    client = _shared_session() if _reuse_connections() else requests
     start = time.perf_counter()
     try:
-        return client.get(url, **kwargs)
+        if _reuse_connections():
+            return _shared_session().get(url, **kwargs)
+        # Same as requests.get (a throwaway session per call), but with the counting adapter.
+        with counting_session() as session:
+            return session.get(url, **kwargs)
     finally:
         if has_app_context():
             elapsed = (time.perf_counter() - start) * 1000

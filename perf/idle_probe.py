@@ -9,12 +9,10 @@ Usage:
 """
 import argparse
 import csv
-import logging
 import statistics
 import time
 
-import requests
-
+from app import http_client
 from app.services.geocoding_service import GEOCODING_URL, geocoding_params
 from app.services.weather_service import FORECAST_URL, forecast_params
 from perf.cities import CITIES
@@ -22,24 +20,11 @@ from perf.cities import CITIES
 GAPS_S = [0, 0.5, 1, 2, 3, 5, 10]
 
 
-class _Counter(logging.Handler):
-    count = 0
-
-    def emit(self, record):
-        if record.getMessage().startswith("Starting new HTTP"):
-            _Counter.count += 1
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--calls", type=int, default=8)
     parser.add_argument("--csv", default=None)
     args = parser.parse_args()
-
-    urllib3_logger = logging.getLogger("urllib3.connectionpool")
-    urllib3_logger.addHandler(_Counter())
-    urllib3_logger.setLevel(logging.DEBUG)
-    urllib3_logger.propagate = False
 
     _city, _country, _code, lat, lon = CITIES[0]
     apis = {
@@ -49,15 +34,15 @@ def main():
     rows = []
     for api, (url, params) in apis.items():
         for gap in GAPS_S:
-            session = requests.Session()
+            session = http_client.counting_session()
             session.get(url, params=params, timeout=15).raise_for_status()  # open the connection once
             for _ in range(args.calls):
                 time.sleep(gap)
-                before = _Counter.count
+                before = http_client.new_connections_total()
                 start = time.perf_counter()
                 session.get(url, params=params, timeout=15).raise_for_status()
                 rows.append({"api": api, "gap_s": gap, "ms": round((time.perf_counter() - start) * 1000, 1),
-                             "new_connection": int(_Counter.count > before)})
+                             "new_connection": http_client.new_connections_total() - before})
             session.close()
             print(f"{api} gap={gap}s done", flush=True)
 
