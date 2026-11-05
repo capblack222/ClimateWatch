@@ -10,13 +10,7 @@ import random
 
 from locust import HttpUser, between, task
 
-CITIES = [
-    ("Mumbai", "India", "IN", 19.07, 72.88),
-    ("College Park", "United States", "US", 38.98, -76.94),
-    ("Pristina", "Kosovo", "XK", 42.67, 21.17),
-    ("Niamey", "Niger", "NE", 13.51, 2.11),
-    ("Berlin", "Germany", "DE", 52.52, 13.41),
-]
+from perf.cities import CITIES
 
 
 class DashboardUser(HttpUser):

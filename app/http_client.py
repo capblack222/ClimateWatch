@@ -1,8 +1,10 @@
 """Outbound HTTP for Open-Meteo calls: optional connection reuse plus per-request timing.
 
-Every call adds its wall-clock time to `g.upstream_ms`, so the request log can show how much of a
-request was spent waiting on external APIs versus inside the app.
+Every call adds its wall-clock time to `g.upstream_ms`, and every new TCP/TLS connection that urllib3
+opens is counted in `g.upstream_new_connections`, so the request log shows directly whether a request
+reused a pooled connection or paid for a fresh handshake.
 """
+import logging
 import time
 
 import requests
@@ -10,6 +12,27 @@ from flask import current_app, g, has_app_context
 from requests.adapters import HTTPAdapter
 
 _session = None
+_URLLIB3_LOGGER = "urllib3.connectionpool"
+
+
+class _NewConnectionCounter(logging.Handler):
+    """Counts urllib3's 'Starting new HTTPS connection' events against the current request."""
+
+    def emit(self, record):
+        if record.levelno >= logging.WARNING:
+            logging.getLogger().handle(record)  # keep urllib3 warnings visible in the normal log stream
+            return
+        if record.msg.startswith("Starting new HTTP") and has_app_context():
+            g.upstream_new_connections = g.get("upstream_new_connections", 0) + 1
+
+
+def install_connection_counter():
+    """Idempotent. urllib3 reports new connections only at DEBUG, so capture that logger privately."""
+    logger = logging.getLogger(_URLLIB3_LOGGER)
+    if not any(isinstance(h, _NewConnectionCounter) for h in logger.handlers):
+        logger.addHandler(_NewConnectionCounter())
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False  # don't print urllib3 debug lines; warnings are re-emitted above
 
 
 def _shared_session():
@@ -17,8 +40,7 @@ def _shared_session():
     global _session
     if _session is None:
         _session = requests.Session()
-        adapter = HTTPAdapter(pool_connections=4, pool_maxsize=10)
-        _session.mount("https://", adapter)
+        _session.mount("https://", HTTPAdapter(pool_connections=4, pool_maxsize=10))
     return _session
 
 

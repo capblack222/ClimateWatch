@@ -36,17 +36,22 @@ def load(paths):
 
 def main(paths):
     groups = load(paths)
-    print("| Endpoint | Connections | n | p50 (ms) | p95 | p99 | Mean | Mean upstream | Mean in-app |")
-    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    print("| Endpoint | Connections | n | p50 (ms) | p95 | p99 | Mean | Mean upstream | Mean in-app "
+          "| New conn. per call |")
+    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for (path, mode), entries in sorted(groups.items()):
         total = [e["duration_ms"] for e in entries]
         upstream = [e.get("upstream_ms", 0.0) for e in entries]
         in_app = [t - u for t, u in zip(total, upstream, strict=True)]
+        calls = sum(e.get("upstream_calls", 0) for e in entries)
+        new_conns = sum(e.get("upstream_new_connections", 0) for e in entries)
+        tracked = any("upstream_new_connections" in e for e in entries)
+        new_rate = f"{new_conns / calls:.0%}" if calls and tracked else "-"
         p99 = f"{nearest_rank(total, 99):.0f}" if len(total) >= 100 else "n<100"
         print(
             f"| {path} | {mode} | {len(total)} | {nearest_rank(total, 50):.0f} | {nearest_rank(total, 95):.0f} | "
             f"{p99} | {statistics.mean(total):.0f} | {statistics.mean(upstream):.0f} | "
-            f"{statistics.mean(in_app):.1f} |"
+            f"{statistics.mean(in_app):.1f} | {new_rate} |"
         )
 
 

@@ -7,9 +7,14 @@ GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 SERVICE = "Open-Meteo geocoding"
 
 
+def geocoding_params(name):
+    """Exact query sent to Open-Meteo (shared with perf/probe_upstream.py)."""
+    return {"name": name, "count": 5, "language": "en", "format": "json"}
+
+
 def search_cities(name):
     """Up to 5 matching cities, shaped for the frontend. [] if none match; UpstreamServiceError on failure."""
-    params = {"name": name, "count": 5, "language": "en", "format": "json"}
+    params = geocoding_params(name)
     try:
         resp = http_client.get(GEOCODING_URL, params=params, timeout=8)
         resp.raise_for_status()

@@ -9,9 +9,9 @@ SERVICE = "Open-Meteo forecast"
 _DAILY_FIELDS = ("weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum", "wind_speed_10m_max")
 
 
-def fetch_weather(lat, lon):
-    """Fetch current conditions + 7-day forecast from Open-Meteo. Raises UpstreamServiceError on failure."""
-    params = {
+def forecast_params(lat, lon):
+    """Exact query sent to Open-Meteo (shared with perf/probe_upstream.py)."""
+    return {
         "latitude": lat,
         "longitude": lon,
         "current": [
@@ -22,6 +22,11 @@ def fetch_weather(lat, lon):
         "timezone": "auto",
         "forecast_days": 7,
     }
+
+
+def fetch_weather(lat, lon):
+    """Fetch current conditions + 7-day forecast from Open-Meteo. Raises UpstreamServiceError on failure."""
+    params = forecast_params(lat, lon)
     try:
         resp = http_client.get(FORECAST_URL, params=params, timeout=10)
         resp.raise_for_status()

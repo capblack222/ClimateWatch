@@ -7,6 +7,7 @@ from flask import Flask, g, request
 from app.config import Config
 from app.database.db import close_db
 from app.errors import register_error_handlers
+from app.http_client import install_connection_counter
 from app.logging_config import configure_logging
 
 request_logger = logging.getLogger("app.request")
@@ -15,6 +16,7 @@ request_logger = logging.getLogger("app.request")
 def create_app(config_class=Config):
     # Configure logging before Flask creates app.logger, so Flask doesn't attach its own plain-text handler.
     configure_logging(config_class.LOG_LEVEL)
+    install_connection_counter()
 
     app = Flask(__name__)
     app.config.from_object(config_class)
@@ -53,6 +55,7 @@ def create_app(config_class=Config):
                 # Time spent waiting on Open-Meteo, so app time = duration_ms - upstream_ms.
                 "upstream_ms": round(upstream_ms, 1) if upstream_ms is not None else 0.0,
                 "upstream_calls": g.get("upstream_calls", 0),
+                "upstream_new_connections": g.get("upstream_new_connections", 0),
                 "http_reuse": app.config["HTTP_REUSE_CONNECTIONS"],
             },
         )

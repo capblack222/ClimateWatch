@@ -41,3 +41,34 @@ def test_request_log_includes_upstream_fields(client, mocked_http, caplog):
     assert record.upstream_calls == 1
     assert record.upstream_ms > 0
     assert record.http_reuse is True
+
+
+def test_new_connections_are_counted_per_request(app):
+    import logging
+
+    with app.test_request_context():
+        # Simulate urllib3 reporting two fresh connections and one unrelated debug line.
+        log = logging.getLogger("urllib3.connectionpool")
+        log.debug("Starting new HTTPS connection (%d): %s:%s", 1, "api.open-meteo.com", 443)
+        log.debug("Starting new HTTPS connection (%d): %s:%s", 2, "api.open-meteo.com", 443)
+        log.debug("https://api.open-meteo.com:443 \"GET /v1/forecast HTTP/1.1\" 200 None")
+        assert g.upstream_new_connections == 2
+
+
+def test_urllib3_warnings_still_reach_the_root_logger(app, caplog):
+    import logging
+
+    caplog.set_level("WARNING")
+    logging.getLogger("urllib3.connectionpool").warning("Connection pool is full, discarding connection")
+    assert "Connection pool is full" in caplog.text
+
+
+def test_install_is_idempotent(app):
+    import logging
+
+    from app.http_client import _NewConnectionCounter, install_connection_counter
+
+    install_connection_counter()
+    install_connection_counter()
+    handlers = logging.getLogger("urllib3.connectionpool").handlers
+    assert sum(isinstance(h, _NewConnectionCounter) for h in handlers) == 1

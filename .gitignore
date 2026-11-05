@@ -65,3 +65,5 @@ data/
 # Ignore Architecture discussion files
 _notes/
 Claude/
+# Local Claude instructions (private)
+CLAUDE.md

@@ -1,4 +1,5 @@
 import logging
+import os
 
 from dotenv import load_dotenv
 
@@ -15,5 +16,7 @@ if __name__ == "__main__":
     with app.app_context():
         init_db()
         load_owid_csv()
-    logging.getLogger("app").info("Server starting", extra={"url": "http://127.0.0.1:5000"})
-    app.run(debug=app.config["DEBUG"])
+    # macOS AirPlay Receiver also listens on 5000; set PORT to avoid it.
+    port = int(os.environ.get("PORT", "5000"))
+    logging.getLogger("app").info("Server starting", extra={"url": f"http://127.0.0.1:{port}"})
+    app.run(port=port, debug=app.config["DEBUG"])
